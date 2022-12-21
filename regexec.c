@@ -3159,6 +3159,7 @@ match_at(regex_t* reg, const UChar* str, const UChar* end,
 #endif
 
       MOP_OUT;
+      CHECK_INTERRUPT_IN_MATCH_AT;
       JUMP;
 
     DEFAULT
