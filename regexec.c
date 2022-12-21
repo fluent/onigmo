@@ -3092,7 +3092,8 @@ match_at(regex_t* reg, const UChar* str, const UChar* end,
 	}
 	else {
 	  STACK_PUSH_ALT(p + addr, s, sprev, pkeep); /* Push possible point. */
-	  n = enclen(encode, s, end);
+	  /* For approximating enclen. Strict version of enclen does not work here. */
+	  n = enclen_approximate(encode, s, end);
 	  STACK_PUSH_ABSENT_POS(absent, ABSENT_END_POS); /* Save the original pos. */
 	  STACK_PUSH_ALT(selfp, s + n, s, pkeep); /* Next iteration. */
 	  STACK_PUSH_ABSENT;
