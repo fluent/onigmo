@@ -41,6 +41,14 @@
 /* for byte-code statistical data. */
 /* #define ONIG_DEBUG_STATISTICS */
 
+/* enable matching optimization by using cache. */
+#define USE_CACHE_MATCH_OPT
+
+#ifdef USE_CACHE_MATCH_OPT
+#  define NUM_CACHE_OPCODE_FAIL -1
+#  define NUM_CACHE_OPCODE_UNINIT -2
+#endif
+
 #if defined(ONIG_DEBUG_PARSE_TREE) || defined(ONIG_DEBUG_MATCH) || \
     defined(ONIG_DEBUG_SEARCH) || defined(ONIG_DEBUG_COMPILE) || \
     defined(ONIG_DEBUG_STATISTICS) || defined(ONIG_DEBUG_MEMLEAK)
@@ -383,7 +391,8 @@ typedef unsigned int  BitStatusType;
 } while (0)
 
 
-#define INT_MAX_LIMIT           ((1UL << (SIZEOF_INT * 8 - 1)) - 1)
+#define INT_MAX_LIMIT            ((1UL << (SIZEOF_INT * 8 - 1)) - 1)
+#define LONG_MAX_LIMIT           ((1UL << (SIZEOF_LONG * 8 - 1)) - 1)
 
 #define DIGITVAL(code)    ((code) - '0')
 #define ODIGITVAL(code)   DIGITVAL(code)
@@ -868,6 +877,14 @@ typedef struct _OnigStackType {
   } u;
 } OnigStackType;
 
+#ifdef USE_CACHE_MATCH_OPT
+typedef struct {
+  UChar* addr;
+  long num;
+  int outer_repeat;
+} OnigCacheIndex;
+#endif
+
 typedef struct {
   void* stack_p;
   size_t stack_n;
@@ -882,6 +899,14 @@ typedef struct {
 #ifdef USE_COMBINATION_EXPLOSION_CHECK
   void* state_check_buff;
   int   state_check_buff_size;
+#endif
+#ifdef USE_CACHE_MATCH_OPT
+  long            num_fail;
+  int             enable_cache_match_opt;
+  long            num_cache_opcode;
+  long            num_cache_table;
+  OnigCacheIndex* cache_index_table;
+  uint8_t*        match_cache;
 #endif
   int counter;
 } OnigMatchArg;
