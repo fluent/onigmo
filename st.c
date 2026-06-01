@@ -621,8 +621,8 @@ st_init_table_with_size(const struct st_hash_type *type, st_index_t size)
         }
 #endif
     }
-    tab->entries = (st_table_entry *) malloc(get_allocated_entries(tab)
-					     * sizeof(st_table_entry));
+    tab->entries = (st_table_entry *) calloc(get_allocated_entries(tab),
+					     sizeof(st_table_entry));
 #ifndef RUBY
     if (tab->entries == NULL) {
         st_free_table(tab);
@@ -1349,8 +1349,8 @@ st_copy(st_table *old_tab)
         }
 #endif
     }
-    new_tab->entries = (st_table_entry *) malloc(get_allocated_entries(old_tab)
-						 * sizeof(st_table_entry));
+    new_tab->entries = (st_table_entry *) calloc(get_allocated_entries(old_tab),
+						 sizeof(st_table_entry));
 #ifndef RUBY
     if (new_tab->entries == NULL) {
         st_free_table(new_tab);
