@@ -39,6 +39,75 @@ check(const char* pattern, const char* text, unsigned long limit,
   return failed;
 }
 
+/* A cache must not change the final capture of a nullable repeated group. */
+static int
+check_nullable_capture(void)
+{
+  const char* pattern = "((a|b|)*)*b|a+!";
+  const char* text = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab";
+  regex_t* reg;
+  OnigRegion* region;
+  OnigErrorInfo error;
+  const UChar* str = (const UChar*)text;
+  const UChar* end = str + strlen(text);
+  OnigPosition result;
+  int failed;
+
+  if (onig_new(&reg, (const UChar*)pattern,
+               (const UChar*)pattern + strlen(pattern), ONIG_OPTION_DEFAULT,
+               ONIG_ENCODING_UTF8, ONIG_SYNTAX_RUBY, &error) != ONIG_NORMAL) {
+    return 1;
+  }
+  onig_set_match_operation_limit(100000);
+  region = onig_region_new();
+  result = onig_search(reg, str, end, str, end, region, ONIG_OPTION_NONE);
+  failed = result != 0 || region->num_regs != 3;
+  if (!failed) {
+    failed = region->beg[1] != 35 || region->end[1] != 35 ||
+             region->beg[2] != 35 || region->end[2] != 35;
+  }
+  if (failed) fprintf(stderr, "nullable repeat changed its captures\n");
+  onig_region_free(region, 1);
+  onig_free(reg);
+  return failed;
+}
+
+/* Cache initialization must not write into a potentially shared regex. */
+static int
+check_shared_repeat_range(void)
+{
+  const char* pattern = "^(a|aa){0,20}b$";
+  const char* text = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabc";
+  regex_t* reg;
+  OnigErrorInfo error;
+  const UChar* str = (const UChar*)text;
+  const UChar* end = str + strlen(text);
+  OnigPosition result;
+  int i;
+  int failed = 0;
+
+  if (onig_new(&reg, (const UChar*)pattern,
+               (const UChar*)pattern + strlen(pattern), ONIG_OPTION_DEFAULT,
+               ONIG_ENCODING_UTF8, ONIG_SYNTAX_RUBY, &error) != ONIG_NORMAL) {
+    return 1;
+  }
+  if (reg->num_repeat == 0) failed = 1;
+  for (i = 0; i < reg->num_repeat; i++) {
+    reg->repeat_range[i].base_num = -123;
+    reg->repeat_range[i].inner_num = -456;
+  }
+  onig_set_match_operation_limit(10000000);
+  result = onig_search(reg, str, end, str, end, NULL, ONIG_OPTION_NONE);
+  failed |= result != ONIG_MISMATCH;
+  for (i = 0; i < reg->num_repeat; i++) {
+    failed |= reg->repeat_range[i].base_num != -123 ||
+              reg->repeat_range[i].inner_num != -456;
+  }
+  if (failed) fprintf(stderr, "cache modified the compiled repeat ranges\n");
+  onig_free(reg);
+  return failed;
+}
+
 int
 main(void)
 {
@@ -53,6 +122,20 @@ main(void)
   text[sizeof(text) - 1] = '\0';
   failed |= check("^(a+)+$", text, 100, 0, 0, ONIGERR_MATCH_OPERATION_LIMIT_OVER);
   failed |= check("^(a*)*$", text, 100, 0, 1, ONIGERR_MATCH_OPERATION_LIMIT_OVER);
+#ifndef ONIG_DISABLE_CACHE_MATCH_OPT
+  /* These formerly exponential searches now finish without spending the budget. */
+  failed |= check("^(a+)+$", text, 10000000, 0, 0, ONIG_MISMATCH);
+  failed |= check("^(a*)*$", text, 100000, 0, 1,
+                  ONIGERR_MATCH_OPERATION_LIMIT_OVER);
+  failed |= check("^(a+)+$", text, 10000000, 1, 0, ONIG_MISMATCH);
+  failed |= check("^(a+)+$|^(a+)!$", text, 10000000, 0, 0, 0);
+#endif
+  /* Backreferences cannot use the cache, so the budget remains essential. */
+  failed |= check("^(a+)+\\1$", text, 100000, 0, 0,
+                  ONIGERR_MATCH_OPERATION_LIMIT_OVER);
+  /* A large finite repeat would require an excessive cache allocation. */
+  failed |= check("^(a|aa){0,100000}$", text, 100000, 0, 0,
+                  ONIGERR_MATCH_OPERATION_LIMIT_OVER);
   /* Each candidate needs few instructions; the total search must be bounded. */
   failed |= check("[ab]$", text, 100, 0, 0, ONIGERR_MATCH_OPERATION_LIMIT_OVER);
   failed |= check("[ab]$", text, 100, 1, 0, ONIGERR_MATCH_OPERATION_LIMIT_OVER);
@@ -64,6 +147,10 @@ main(void)
   failed |= check("a", "a", 100, 0, 0, 0);
   onig_error_code_to_str(message, ONIGERR_MATCH_OPERATION_LIMIT_OVER);
   failed |= strcmp((const char*)message, "match operation limit over") != 0;
+  failed |= check_nullable_capture();
+#ifndef ONIG_DISABLE_CACHE_MATCH_OPT
+  failed |= check_shared_repeat_range();
+#endif
   onig_set_match_operation_limit(0);
   onig_end();
   return failed;
