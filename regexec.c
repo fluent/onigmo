@@ -589,9 +589,11 @@ init_cache_index_table(regex_t* reg, OnigRepeatRange* ranges, OnigCacheIndex* ta
       GET_MEMNUM_INC(mem, p);
       p += SIZE_RELADDR;
       if (ranges[mem].lower == 0) {
+        /* The initial exit decision owns a global slot before base_num.
+         * Mark it global so lookup and reset both use num directly. */
 	table->addr = pbegin;
-	table->num = num - current_mem_num;
-	table->outer_repeat = mem;
+	table->num = num;
+	table->outer_repeat = -1;
 	num++;
 	table++;
       }
@@ -859,8 +861,13 @@ onig_region_copy(OnigRegion* to, const OnigRegion* from)
 # define MATCH_ARG_FREE_CACHE_MATCH_OPT(msa)
 #endif
 
-/* Set during initialization, before starting concurrent searches. */
-static unsigned long MatchOperationLimit = 0;
+/* Embedders can establish a default without a runtime global write. */
+#ifndef DEFAULT_MATCH_OPERATION_LIMIT
+# define DEFAULT_MATCH_OPERATION_LIMIT 0
+#endif
+
+/* Overrides must be set before starting concurrent searches. */
+static unsigned long MatchOperationLimit = DEFAULT_MATCH_OPERATION_LIMIT;
 
 extern unsigned long
 onig_get_match_operation_limit(void)
@@ -1101,11 +1108,6 @@ find_cache_index_table(OnigRepeatRange* ranges, OnigStackType* stk,
     return item->num;
 
   range = &ranges[item->outer_repeat];
-  /* A zero-lower-bound repeat has a separate initial exit decision. */
-  if (*p == OP_REPEAT || *p == OP_REPEAT_NG) {
-    return range->base_num - 1;
-  }
-
   stkp = &stk[repeat_stk[item->outer_repeat]];
   /* Increment opcodes run after count is advanced. Each optional iteration
    * owns inner_num body slots followed by one increment/exit slot. Using

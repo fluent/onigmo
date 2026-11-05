@@ -3,6 +3,10 @@
 #include <string.h>
 #include "onigmo.h"
 
+#ifndef DEFAULT_MATCH_OPERATION_LIMIT
+# define DEFAULT_MATCH_OPERATION_LIMIT 0
+#endif
+
 static int
 check(const char* pattern, const char* text, unsigned long limit,
       int backward, int match, OnigPosition expected)
@@ -137,6 +141,17 @@ check_repeat_boundaries(void)
       }
     }
   }
+  /* Earlier repeats move the reserved zero-lower entry beyond its own body
+   * span. Include an empty final repeat to exercise the last cache row. */
+  failed |= check("^(x|xx){1,30}(a|aa){0,10}b$",
+                  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxaaaaaaaaaaaaaaab",
+                  10000000, 0, 0, 0);
+  failed |= check("^(x|xx){1,30}(a|aa){0,10}?b$",
+                  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxaaaaaaaaaaaaaaab",
+                  10000000, 0, 0, 0);
+  failed |= check("^(x|xx){1,30}(a|aa){0,10}$",
+                  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                  10000000, 0, 0, 0);
   failed |= check("^(a|aa){3,}b$", "aaaaaaaaaaaaaaab", 10000000, 0, 0, 0);
   failed |= check("^(a|aa){3,}?b$", "aaaaaaaaaaaaaaab", 10000000, 0, 0, 0);
   return failed;
@@ -184,7 +199,7 @@ main(void)
   int failed = 0;
 
   onig_init();
-  failed |= onig_get_match_operation_limit() != 0;
+  failed |= onig_get_match_operation_limit() != DEFAULT_MATCH_OPERATION_LIMIT;
   memset(text, 'a', sizeof(text) - 2);
   text[sizeof(text) - 2] = '!';
   text[sizeof(text) - 1] = '\0';
