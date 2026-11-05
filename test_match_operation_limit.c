@@ -108,6 +108,74 @@ check_shared_repeat_range(void)
   return failed;
 }
 
+/* Exercise the cache at repeat bounds, for both directions and greediness. */
+static int
+check_repeat_boundaries(void)
+{
+  const int lower_bounds[] = {0, 1, 3, 10};
+  char pattern[64];
+  char text[23];
+  int i;
+  int lazy;
+  int count;
+  int failed = 0;
+  OnigPosition expected;
+
+  for (i = 0; i < 4; i++) {
+    for (lazy = 0; lazy < 2; lazy++) {
+      snprintf(pattern, sizeof(pattern), "^(a|aa){%d,10}%sb$",
+               lower_bounds[i], lazy ? "?" : "");
+      for (count = 0; count <= 21; count++) {
+        memset(text, 'a', count);
+        text[count] = 'b';
+        text[count + 1] = '\0';
+        expected = count >= lower_bounds[i] && count <= 20 ? 0 : ONIG_MISMATCH;
+        failed |= check(pattern, text, 10000000, 0, 0, expected);
+        failed |= check(pattern, text, 10000000, 1, 0, expected);
+        failed |= check(pattern, text, 10000000, 0, 1,
+                        expected == 0 ? count + 1 : expected);
+      }
+    }
+  }
+  failed |= check("^(a|aa){3,}b$", "aaaaaaaaaaaaaaab", 10000000, 0, 0, 0);
+  failed |= check("^(a|aa){3,}?b$", "aaaaaaaaaaaaaaab", 10000000, 0, 0, 0);
+  return failed;
+}
+
+static int
+check_repeat_capture(void)
+{
+  const char* pattern = "^(a|aa){3,10}b$";
+  const char* text = "aaaaaaaaaaaaaaab";
+  regex_t* reg;
+  OnigRegion* region;
+  OnigErrorInfo error;
+  const UChar* str = (const UChar*)text;
+  const UChar* end = str + strlen(text);
+  OnigPosition result;
+  int failed;
+
+  if (onig_new(&reg, (const UChar*)pattern,
+               (const UChar*)pattern + strlen(pattern), ONIG_OPTION_DEFAULT,
+               ONIG_ENCODING_UTF8, ONIG_SYNTAX_RUBY, &error) != ONIG_NORMAL) {
+    return 1;
+  }
+  onig_set_match_operation_limit(10000000);
+  region = onig_region_new();
+  result = onig_search(reg, str, end, str, end, region, ONIG_OPTION_NONE);
+  failed = result != 0 || region->num_regs != 2;
+  if (!failed) {
+    failed = region->beg[0] != 0 || region->end[0] != 16 ||
+             region->beg[1] != 13 || region->end[1] != 15;
+  }
+  if (failed) {
+    fprintf(stderr, "bounded repeat lost its match or final capture\n");
+  }
+  onig_region_free(region, 1);
+  onig_free(reg);
+  return failed;
+}
+
 int
 main(void)
 {
@@ -147,6 +215,8 @@ main(void)
   failed |= check("a", "a", 100, 0, 0, 0);
   onig_error_code_to_str(message, ONIGERR_MATCH_OPERATION_LIMIT_OVER);
   failed |= strcmp((const char*)message, "match operation limit over") != 0;
+  failed |= check_repeat_boundaries();
+  failed |= check_repeat_capture();
   failed |= check_nullable_capture();
 #ifndef ONIG_DISABLE_CACHE_MATCH_OPT
   failed |= check_shared_repeat_range();
