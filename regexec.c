@@ -861,8 +861,13 @@ onig_region_copy(OnigRegion* to, const OnigRegion* from)
 # define MATCH_ARG_FREE_CACHE_MATCH_OPT(msa)
 #endif
 
-/* Set during initialization, before starting concurrent searches. */
-static unsigned long MatchOperationLimit = 0;
+/* Embedders can establish a default without a runtime global write. */
+#ifndef DEFAULT_MATCH_OPERATION_LIMIT
+# define DEFAULT_MATCH_OPERATION_LIMIT 0
+#endif
+
+/* Overrides must be set before starting concurrent searches. */
+static unsigned long MatchOperationLimit = DEFAULT_MATCH_OPERATION_LIMIT;
 
 extern unsigned long
 onig_get_match_operation_limit(void)
