@@ -1068,7 +1068,7 @@ stack_double(OnigStackType** arg_stk_base, OnigStackType** arg_stk_end,
       long index = key >> 3;\
       long mask = 1 << (key & 7);\
       if ((match_cache)[index] & mask) {\
-	goto fail;\
+	goto match_cache_hit;\
       }\
       (match_cache)[index] |= mask;\
     }\
@@ -1085,7 +1085,6 @@ find_cache_index_table(OnigRepeatRange* ranges, OnigStackType* stk,
   OnigRepeatRange* range;
   OnigStackType* stkp;
   int count = 0;
-  int is_inc = *p == OP_REPEAT_INC || *p == OP_REPEAT_INC_NG;
 
   while (l <= r) {
     m = (l + r) / 2;
@@ -1102,14 +1101,22 @@ find_cache_index_table(OnigRepeatRange* ranges, OnigStackType* stk,
     return item->num;
 
   range = &ranges[item->outer_repeat];
+  /* A zero-lower-bound repeat has a separate initial exit decision. */
+  if (*p == OP_REPEAT || *p == OP_REPEAT_NG) {
+    return range->base_num - 1;
+  }
+
   stkp = &stk[repeat_stk[item->outer_repeat]];
-  count = is_inc ? stkp->u.repeat.count - 1 : stkp->u.repeat.count;
+  /* Increment opcodes run after count is advanced. Each optional iteration
+   * owns inner_num body slots followed by one increment/exit slot. Using
+   * count - 1 would alias the lower-bound decision with the next body. */
+  count = stkp->u.repeat.count;
 
   if (count < range->lower)
     return range->base_num + range->inner_num * count + item->num;
 
   if (range->upper == 0x7fffffff)
-    return range->base_num + range->inner_num * range->lower + (is_inc ? 0 : 1) + item->num;
+    return range->base_num + range->inner_num * range->lower + item->num;
 
   return range->base_num + range->inner_num * range->lower +
          (range->inner_num + 1) * (count - range->lower) + item->num;
@@ -3798,6 +3805,16 @@ match_at(regex_t* reg, const UChar* str, const UChar* end,
 
     CASE(OP_FINISH)
       goto finish;
+
+#ifdef USE_CACHE_MATCH_OPT
+    match_cache_hit:
+      /* Greedy increments have advanced the count but have not yet pushed
+       * their undo entry. Restore it before the cache hit backtracks. */
+      if (*pbegin == OP_REPEAT_INC) {
+        STACK_AT(repeat_stk[mem])->u.repeat.count--;
+      }
+      goto fail;
+#endif
 
     CASE(OP_FAIL)
       if (0) {
