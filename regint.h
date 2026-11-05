@@ -42,9 +42,12 @@
 /* #define ONIG_DEBUG_STATISTICS */
 
 /* enable matching optimization by using cache. */
+#ifndef ONIG_DISABLE_CACHE_MATCH_OPT
 #define USE_CACHE_MATCH_OPT
+#endif
 
 #ifdef USE_CACHE_MATCH_OPT
+#  define MATCH_CACHE_MAX_BYTES (8UL * 1024 * 1024)
 #  define NUM_CACHE_OPCODE_FAIL -1
 #  define NUM_CACHE_OPCODE_UNINIT -2
 #endif
@@ -886,6 +889,8 @@ typedef struct {
 #endif
 
 typedef struct {
+  unsigned long operation_limit;
+  unsigned long operations_remaining;
   void* stack_p;
   size_t stack_n;
   OnigOptionType options;
@@ -901,10 +906,11 @@ typedef struct {
   int   state_check_buff_size;
 #endif
 #ifdef USE_CACHE_MATCH_OPT
-  long            num_fail;
+  size_t          num_fail;
   int             enable_cache_match_opt;
   long            num_cache_opcode;
   long            num_cache_table;
+  OnigRepeatRange* cache_repeat_range;
   OnigCacheIndex* cache_index_table;
   uint8_t*        match_cache;
 #endif
