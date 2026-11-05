@@ -3,6 +3,10 @@
 #include <string.h>
 #include "onigmo.h"
 
+#ifndef DEFAULT_MATCH_OPERATION_LIMIT
+# define DEFAULT_MATCH_OPERATION_LIMIT 0
+#endif
+
 static int
 check(const char* pattern, const char* text, unsigned long limit,
       int backward, int match, OnigPosition expected)
@@ -195,7 +199,7 @@ main(void)
   int failed = 0;
 
   onig_init();
-  failed |= onig_get_match_operation_limit() != 0;
+  failed |= onig_get_match_operation_limit() != DEFAULT_MATCH_OPERATION_LIMIT;
   memset(text, 'a', sizeof(text) - 2);
   text[sizeof(text) - 2] = '!';
   text[sizeof(text) - 1] = '\0';
