@@ -589,9 +589,11 @@ init_cache_index_table(regex_t* reg, OnigRepeatRange* ranges, OnigCacheIndex* ta
       GET_MEMNUM_INC(mem, p);
       p += SIZE_RELADDR;
       if (ranges[mem].lower == 0) {
+        /* The initial exit decision owns a global slot before base_num.
+         * Mark it global so lookup and reset both use num directly. */
 	table->addr = pbegin;
-	table->num = num - current_mem_num;
-	table->outer_repeat = mem;
+	table->num = num;
+	table->outer_repeat = -1;
 	num++;
 	table++;
       }
@@ -1101,11 +1103,6 @@ find_cache_index_table(OnigRepeatRange* ranges, OnigStackType* stk,
     return item->num;
 
   range = &ranges[item->outer_repeat];
-  /* A zero-lower-bound repeat has a separate initial exit decision. */
-  if (*p == OP_REPEAT || *p == OP_REPEAT_NG) {
-    return range->base_num - 1;
-  }
-
   stkp = &stk[repeat_stk[item->outer_repeat]];
   /* Increment opcodes run after count is advanced. Each optional iteration
    * owns inner_num body slots followed by one increment/exit slot. Using
