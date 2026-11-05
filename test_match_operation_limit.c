@@ -137,6 +137,17 @@ check_repeat_boundaries(void)
       }
     }
   }
+  /* Earlier repeats move the reserved zero-lower entry beyond its own body
+   * span. Include an empty final repeat to exercise the last cache row. */
+  failed |= check("^(x|xx){1,30}(a|aa){0,10}b$",
+                  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxaaaaaaaaaaaaaaab",
+                  10000000, 0, 0, 0);
+  failed |= check("^(x|xx){1,30}(a|aa){0,10}?b$",
+                  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxaaaaaaaaaaaaaaab",
+                  10000000, 0, 0, 0);
+  failed |= check("^(x|xx){1,30}(a|aa){0,10}$",
+                  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                  10000000, 0, 0, 0);
   failed |= check("^(a|aa){3,}b$", "aaaaaaaaaaaaaaab", 10000000, 0, 0, 0);
   failed |= check("^(a|aa){3,}?b$", "aaaaaaaaaaaaaaab", 10000000, 0, 0, 0);
   return failed;
