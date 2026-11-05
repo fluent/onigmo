@@ -886,6 +886,8 @@ typedef struct {
 #endif
 
 typedef struct {
+  unsigned long operation_limit;
+  unsigned long operations_remaining;
   void* stack_p;
   size_t stack_n;
   OnigOptionType options;

@@ -842,8 +842,37 @@ onig_region_copy(OnigRegion* to, const OnigRegion* from)
 # define MATCH_ARG_FREE_CACHE_MATCH_OPT(msa)
 #endif
 
+/* Set during initialization, before starting concurrent searches. */
+static unsigned long MatchOperationLimit = 0;
+
+extern unsigned long
+onig_get_match_operation_limit(void)
+{
+  return MatchOperationLimit;
+}
+
+extern int
+onig_set_match_operation_limit(unsigned long limit)
+{
+  MatchOperationLimit = limit;
+  return 0;
+}
+
+/* Shared by every candidate position in one search; zero means unlimited. */
+#define CHECK_MATCH_OPERATION_LIMIT do {\
+  if (msa->operation_limit != 0) {\
+    if (msa->operations_remaining == 0) {\
+      best_len = ONIGERR_MATCH_OPERATION_LIMIT_OVER;\
+      goto finish;\
+    }\
+    msa->operations_remaining--;\
+  }\
+} while (0)
+
 #ifdef USE_FIND_LONGEST_SEARCH_ALL_OF_RANGE
 # define MATCH_ARG_INIT(msa, arg_option, arg_region, arg_start, arg_gpos) do {\
+  (msa).operation_limit = MatchOperationLimit;\
+  (msa).operations_remaining = MatchOperationLimit;\
   (msa).stack_p  = (void* )0;\
   (msa).options  = (arg_option);\
   (msa).region   = (arg_region);\
@@ -855,6 +884,8 @@ onig_region_copy(OnigRegion* to, const OnigRegion* from)
 } while(0)
 #else
 # define MATCH_ARG_INIT(msa, arg_option, arg_region, arg_start, arg_gpos) do {\
+  (msa).operation_limit = MatchOperationLimit;\
+  (msa).operations_remaining = MatchOperationLimit;\
   (msa).stack_p  = (void* )0;\
   (msa).options  = (arg_option);\
   (msa).region   = (arg_region);\
@@ -2024,7 +2055,7 @@ match_at(regex_t* reg, const UChar* str, const UChar* end,
 # define OP_OFFSET  1
 # define VM_LOOP JUMP;
 # define VM_LOOP_END
-# define CASE(x) L_##x: sbegin = s; OPCODE_EXEC_HOOK;
+# define CASE(x) L_##x: sbegin = s; CHECK_MATCH_OPERATION_LIMIT; OPCODE_EXEC_HOOK;
 # define DEFAULT L_DEFAULT:
 # define NEXT sprev = sbegin; JUMP
 # define JUMP pbegin = p; RB_GNUC_EXTENSION_BLOCK(goto *oplabels[*p++])
@@ -2202,6 +2233,7 @@ match_at(regex_t* reg, const UChar* str, const UChar* end,
 # define OP_OFFSET  0
 # define VM_LOOP                                \
   while (1) {                                   \
+  CHECK_MATCH_OPERATION_LIMIT;                 \
   OPCODE_EXEC_HOOK;                             \
   pbegin = p;                                   \
   sbegin = s;                                   \
